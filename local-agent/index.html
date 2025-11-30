@@ -518,25 +518,67 @@
             }
             
             startMessageListener() {
-                // Мгновенная проверка новых сообщений каждые 100мс
+                console.log('🔍 Starting message listener...');
+                
+                // 1. Мгновенная проверка каждые 50мс
                 setInterval(() => {
                     const messages = this.bridge.getMessages();
                     const unreadMessages = messages.filter(msg => !msg.read);
                     
                     unreadMessages.forEach(msg => {
                         if (!this.messageQueue.find(q => q.id === msg.id)) {
+                            console.log('📨 Found new message:', msg);
                             this.addToQueue(msg);
                         }
                     });
-                }, 100);
+                }, 50);
                 
-                // Дополнительная проверка через кастомные события
+                // 2. Слушаем bridge события
+                this.bridge.on('newMessages', (messages) => {
+                    console.log('📨 Bridge newMessages:', messages);
+                    const unreadMessages = messages.filter(msg => !msg.read);
+                    unreadMessages.forEach(msg => {
+                        if (!this.messageQueue.find(q => q.id === msg.id)) {
+                            this.addToQueue(msg);
+                        }
+                    });
+                });
+                
+                // 3. Слушаем кастомные события
                 window.addEventListener('newMessage', (e) => {
+                    console.log('📨 Custom newMessage event:', e.detail);
                     const message = e.detail;
                     if (!this.messageQueue.find(q => q.id === message.id)) {
                         this.addToQueue(message);
                     }
                 });
+                
+                // 4. Слушаем storage события
+                window.addEventListener('storage', (e) => {
+                    if (e.key === '404ai_messages') {
+                        console.log('📨 Storage event for messages');
+                        const messages = this.bridge.getMessages();
+                        const unreadMessages = messages.filter(msg => !msg.read);
+                        unreadMessages.forEach(msg => {
+                            if (!this.messageQueue.find(q => q.id === msg.id)) {
+                                this.addToQueue(msg);
+                            }
+                        });
+                    }
+                });
+                
+                // 5. Проверка при загрузке
+                setTimeout(() => {
+                    console.log('🔍 Initial check for messages...');
+                    const messages = this.bridge.getMessages();
+                    const unreadMessages = messages.filter(msg => !msg.read);
+                    console.log('📨 Initial unread messages:', unreadMessages);
+                    unreadMessages.forEach(msg => {
+                        if (!this.messageQueue.find(q => q.id === msg.id)) {
+                            this.addToQueue(msg);
+                        }
+                    });
+                }, 1000);
                 
                 // Для демонстрации добавляем тестовые сообщения каждые 30 секунд
                 setInterval(() => {
@@ -569,6 +611,8 @@
             }
             
             addToQueue(message) {
+                console.log('🎯 Adding message to queue:', message);
+                
                 this.messageQueue.unshift(message);
                 this.totalMessagesCount++;
                 this.renderQueue();

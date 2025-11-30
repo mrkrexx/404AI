@@ -43,25 +43,39 @@ class MessageBridge {
         messages.unshift(newMessage);
         this.saveMessages(messages);
         
-        // Принудительное обновление localStorage
-        localStorage.setItem(this.storageKey, JSON.stringify(messages));
-        
-        // Триггер для других вкладок через storage event
-        window.dispatchEvent(new StorageEvent('storage', {
-            key: this.storageKey,
-            newValue: JSON.stringify(messages),
-            oldValue: null
-        }));
-        
-        // Дополнительный триггер через кастомное событие
-        window.dispatchEvent(new CustomEvent('newMessage', {
-            detail: newMessage
-        }));
-        
-        // Триггер через мост для гарантии доставки
-        this.emit('newMessage', newMessage);
-        
         console.log('📤 Message sent to local agent:', newMessage);
+        
+        // Множественные триггеры для гарантии доставки
+        try {
+            // 1. Storage event для других вкладок
+            localStorage.setItem(this.storageKey, JSON.stringify(messages));
+            
+            // 2. Принудительный storage event
+            window.dispatchEvent(new StorageEvent('storage', {
+                key: this.storageKey,
+                newValue: JSON.stringify(messages),
+                oldValue: null
+            }));
+            
+            // 3. Custom event
+            window.dispatchEvent(new CustomEvent('newMessage', {
+                detail: newMessage
+            }));
+            
+            // 4. Bridge emit
+            this.emit('newMessage', newMessage);
+            
+            // 5. Дополнительная проверка через 100мс
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('newMessage', {
+                    detail: newMessage
+                }));
+            }, 100);
+            
+        } catch (error) {
+            console.error('Error sending message:', error);
+        }
+        
         return newMessage.id;
     }
     
