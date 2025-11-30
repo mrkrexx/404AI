@@ -433,10 +433,123 @@
     </div>
     
     <script src="../shared/config.js"></script>
+    <script src="../shared/auth.js"></script>
     <script src="../shared/bridge.js"></script>
     <script>
+        // Форма входа
+        const LoginForm = {
+            show() {
+                return `
+                    <div class="login-container">
+                        <div class="login-card glass-morphism-enhanced">
+                            <div class="login-header">
+                                <div class="login-avatar">🔐</div>
+                                <h2>404AI Operator Panel</h2>
+                                <p>Вход в систему</p>
+                            </div>
+                            
+                            <form id="loginForm" class="login-form">
+                                <div class="form-group">
+                                    <label for="username">Логин:</label>
+                                    <input 
+                                        type="text" 
+                                        id="username" 
+                                        class="form-input" 
+                                        placeholder="Введите логин"
+                                        required
+                                    >
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="password">Пароль:</label>
+                                    <input 
+                                        type="password" 
+                                        id="password" 
+                                        class="form-input" 
+                                        placeholder="Введите пароль"
+                                        required
+                                    >
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary login-btn">
+                                    🔑 Войти
+                                </button>
+                            </form>
+                            
+                            <div class="login-help">
+                                <h4>Демо аккаунты:</h4>
+                                <div class="demo-accounts">
+                                    <div class="demo-account">
+                                        <strong>admin</strong> / admin123
+                                        <span>👨‍💼 Администратор</span>
+                                    </div>
+                                    <div class="demo-account">
+                                        <strong>operator</strong> / operator123
+                                        <span>👨‍💻 Оператор</span>
+                                    </div>
+                                    <div class="demo-account">
+                                        <strong>support</strong> / support123
+                                        <span>🎧 Поддержка</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            },
+            
+            init() {
+                const form = document.getElementById('loginForm');
+                if (form) {
+                    form.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        this.handleLogin();
+                    });
+                }
+            },
+            
+            handleLogin() {
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                
+                const result = Auth.login(username, password);
+                
+                if (result.success) {
+                    Utils.showNotification(`🎉 Добро пожаловать, ${result.user.displayName}!`, 'success');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    Utils.showNotification(`❌ ${result.error}`, 'error');
+                    document.getElementById('password').value = '';
+                    document.getElementById('username').focus();
+                }
+            }
+        };
         class LocalAgent {
             constructor() {
+                // Проверка авторизации
+                if (!Auth.isAuthenticated()) {
+                    this.showLoginPage();
+                    return;
+                }
+                
+                // Инициализация если авторизован
+                this.currentUser = Auth.getCurrentUser();
+                this.init();
+            }
+            
+            showLoginPage() {
+                document.body.innerHTML = LoginForm.show();
+                LoginForm.init();
+                
+                // Автофокус на поле логина
+                setTimeout(() => {
+                    document.getElementById('username').focus();
+                }, 100);
+            }
+            
+            init() {
                 this.queueList = document.getElementById('queueList');
                 this.messagesContainer = document.getElementById('messagesContainer');
                 this.responseArea = document.getElementById('responseArea');
@@ -454,15 +567,58 @@
                 this.totalMessagesCount = 0;
                 this.isAutoMode = this.bridge.getMode() === CONFIG.MODES.AUTO;
                 
-                this.init();
-            }
-            
-            init() {
+                // Обновляем UI с информацией о пользователе
+                this.updateUserUI();
+                
                 this.setupEventListeners();
                 this.setupBridgeListeners();
                 this.loadSettings();
                 this.startMessageListener();
+                this.renderQueue();
                 this.updateStats();
+                
+                // Обновляем статистику оператора
+                this.updateOperatorStats();
+            }
+            
+            updateUserUI() {
+                if (this.currentUser) {
+                    // Обновляем заголовок с информацией о пользователе
+                    const header = document.querySelector('.header h1');
+                    if (header) {
+                        header.innerHTML = `${this.currentUser.avatar} 404AI Operator - ${this.currentUser.displayName}`;
+                    }
+                    
+                    // Добавляем кнопку выхода
+                    const headerActions = document.querySelector('.header-actions');
+                    if (headerActions) {
+                        const logoutBtn = document.createElement('button');
+                        logoutBtn.className = 'btn btn-secondary btn-logout';
+                        logoutBtn.innerHTML = '🚪 Выход';
+                        logoutBtn.addEventListener('click', () => this.logout());
+                        headerActions.appendChild(logoutBtn);
+                    }
+                }
+            }
+            
+            logout() {
+                if (confirm('Вы уверены, что хотите выйти?')) {
+                    Auth.logout();
+                    Utils.showNotification('👋 Вы вышли из системы', 'info');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                }
+            }
+            
+            updateOperatorStats() {
+                if (!this.currentUser) return;
+                
+                const stats = Auth.getOperatorStats();
+                stats.sessionsCount = (stats.sessionsCount || 0) + 1;
+                stats.lastSession = new Date().toISOString();
+                
+                Auth.updateStats(stats);
             }
             
             setupEventListeners() {
